@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.8 (base)" project-jdk-type="Python SDK" />
+  <component name="PythonCompatibilityInspectionAdvertiser">
+    <option name="version" value="3" />
+  </component>
+  <component name="SvnBranchConfigurationManager">
+    <option name="myConfigurationMap">
+      <map>
+        <entry key="$PROJECT_DIR$/../CurrentCode">
+          <value>
+            <SvnBranchConfiguration>
+              <option name="branchUrls">
+                <list>
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/.idea" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/.ipython" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/.matplotlib" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/GN_LS" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/STARTS" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/UME_preOptClim" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/UME_preOptClim_BOBYQA" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/branches" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/build" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/covariance" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/display" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/dummy" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/fwk" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/ky_util" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/postSetScript" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/pullToPUMA" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/setup" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/source" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/tags" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/test_in" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/um45" />
+                  <option value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/utilities" />
+                </list>
+              </option>
+              <option name="trunkUrl" value="https://svn.ecdf.ed.ac.uk/repo/geos/OptClim/trunk" />
+            </SvnBranchConfiguration>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

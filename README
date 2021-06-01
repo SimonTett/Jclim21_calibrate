@@ -1,0 +1,25 @@
+compECS4covar -- code used to generate Figure 6.
+        It plots the Jacobian from the atmospheric model, parameter uncertainty covariance matrix,
+           Jacobian for ECS4 & T140 and the computed linear response.
+
+ plot_params -- code used to generate Figure 1. plots "fingerprints" of parameters for each configuration used.
+
+ plotAMIPandPerturb -- code used to generate Figures 2 & 3. Which show various performance and response metrics
+                from calibrated ensembles, CMIP5 & CMIP6 ensembles. Also generates tables used in paper.
+
+ plotSAT_Precip_change3.py -- plots Figures 4 & 5
+
+ readJMG_ens -- read the 7 member IC ensemble. Need to set up for 2xCO2 or 4xCO2 cases.
+ compVariability -- compute variability
+ writeData -- compute a bunch of derived values and write them out.
+
+ test_comp_force -- code to test forcing calculations
+
+ Modules
+   PaperLib -- set of handy functions and paths. You will need to edit this to reflect where your data is.
+   readDataLib -- functions for reading in data.
+   StudyConfig -- copy from optimise library but provides methods to read output & config files which are stored as json files.
+   test_StudyConfig -- test cases for StudyConfig
+
+   For StudyConfig & test_StudyConfig updated versions can be found at https://github.com/SimonTett/ModelOptimisation. If you find bugs better to raise an issue there.
+
