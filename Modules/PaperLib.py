@@ -899,7 +899,7 @@ def readPP(dir, name, year=None, realization=None):
 
     # f = os.path.join(time_cache, os.path.basename(dir), name)
     f = dir / name
-    # convert to string as iris doesn;t cope with pathlib
+    # convert to string as iris doesn't cope with pathlib
     f = str(f)
     try:
         cube = iris.load_cube(f)
@@ -964,7 +964,7 @@ def read_pp(file, realization=None, verbose=False):
                           long_name=stuff.long_name,
                           # var_name=stuff.var_name,
                           units=stuff.units,
-                          attributes=stuff.attributes, cell_methods=stuff.attributes,
+                          attributes=stuff.attributes, cell_methods=stuff.cell_methods,
                           dim_coords_and_dims=stuff.dim_coords_and_dims,
                           aux_coords_and_dims=stuff.aux_coords_and_dims)  # ,aux_factories=stuff.aux_factories)
     # all to here could be replaced with cube = iris.load_cube(file) though getting hold of the meta-data
