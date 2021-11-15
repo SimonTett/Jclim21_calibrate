@@ -1,0 +1,15 @@
+,Standard
+air_pressure_at_mean_sea_level_sd,1.0933585691655052
+air_pressure_at_mean_sea_level_corr,0.9677588777634866
+air_temperature_tas_sd,1.02930118349409
+air_temperature_tas_corr,0.992509357292659
+toa_outgoing_longwave_flux_sd,1.0282478780225324
+toa_outgoing_longwave_flux_corr,0.9707716742875271
+toa_outgoing_shortwave_flux_sd,1.066842002147804
+toa_outgoing_shortwave_flux_corr,0.7779636662349046
+precipitation_flux_sd,0.8784351837002292
+precipitation_flux_corr,0.8490376544234054
+air_temperature_500_sd,1.0376229860344561
+air_temperature_500_corr,0.9985515129103995
+relative_humidity_sd,0.9363868305687083
+relative_humidity_corr,0.9204645128934127
