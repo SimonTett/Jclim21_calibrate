@@ -2,7 +2,7 @@
 module containing useful functions and defaults used to produce plots for paper.
 """
 interactive = True
-pltType = 'talk'  # paper to make paper. talk to make 300 dpi pngs
+pltType = 'paper'  # paper to make paper. talk to make 300 dpi pngs
 import collections
 import functools
 import inspect
@@ -102,10 +102,10 @@ if pltType == 'talk':
     markersize = 10
     linewidth = 2.5
     dpi = 300
-    #mpl.rcParams['font.size'] = 20
+    # mpl.rcParams['font.size'] = 20
     mpl.rcParams['savefig.dpi'] = 300
 else:
-    sns.set_context("paper") ##, font_scale=1.0)
+    sns.set_context("paper")  ##, font_scale=1.0)
     defFigType = '.pdf'  # Default type for all figures
     markersize = 8
     linewidth = 2
@@ -117,6 +117,38 @@ fsize = (11.8, 7.2)
 col2xCO2 = 'green'
 col4xCO2 = 'blue'
 
+def sym_colors(df, text=False):
+    """
+    Return a list of colours
+    :param df -- the dataframe  -- needs to have Optimised & Ensemble and set
+    :param text if True (Default is False) return text colour.
+    """
+
+    ens_colours = {'CMIP5': 'black', 'CMIP6': 'cornflowerblue', 'CE7': 'grey', 'DF14': 'orange',
+                   'CE14': 'indianred',
+                   'ICE': 'grey'}
+    ens_text_colours = {'CMIP5': 'black', 'CMIP6': 'darkblue', 'CE7': 'black', 'DF14': 'black',
+                        'CE14': 'black',
+                        'ICE': 'black'}
+
+    optimise = dict(y='lightblue', n='red')  # force optimise to lowercase.
+
+    if text:
+        lookup_colours = ens_text_colours
+        stdColour = 'black'
+    else:
+        lookup_colours = ens_colours
+        stdColour = 'grey'
+    colours = dict()  # list of colors
+    for name, row in df.iterrows():
+        colour = lookup_colours.get(row.Ensemble)
+        if colour is None:
+            colour = optimise.get(str(row.Optimised).lower(), None)
+        if name == 'Standard':
+            colour = stdColour
+        colours[name] = colour
+
+    return pd.Series(colours, name='Colour')
 
 def read_CMIP(json_file, label):
     """
@@ -176,7 +208,42 @@ def areaAvg(cube, xCoord='longitude', yCoord='latitude'):
     result = cube.collapsed([xCoord, yCoord], iris.analysis.MEAN, weights=grid_areas)
     return result
 
+def area_wt(dataArray, longitude_bounds=None, latitude_bounds=None):
+    """
+    compute the area wt for xarray cubes. Needs to make some guesses at the co-ord names
+    to do so.
+    :param dataArray -- dataArray for which weights to be computed
+    :param longitude_bounds -longitude bounds. If not provided then will work out assuming equally spaced longitudes.
+    :param latitude_bounds -- latitude bounds. If not  provided then will work out assuming equally spaced latitudes.
+      For bounds coord should be nx,by,m nbounds -- nbounds =0 - upper bound, nbound=1 -- lower bound
+    """
+    import xarray
+    radius_earth = 6.371e6
+    lon = dataArray.longitude
+    lat = dataArray.latitude
+    if longitude_bounds is None:
+        dx = np.abs(lon - np.roll(lon, 1))
+        dx[0] = dx[-1]
+        longitude_bounds = np.array([lon - dx / 2, lon + dx / 2]).T
 
+    if latitude_bounds is None:
+        dy = np.abs(lat - np.roll(lat, 1))
+        dy[0] = dy[1]
+        latitude_bounds = np.array([(lat + dy / 2).clip(-90, 90), (lat - dy / 2).clip(-90, 90)]).T
+
+    # Want to compute $(\lambda_1-\lambda_0)*(\int_\theta_0^\theta_1 \cos\theta d\theta)$
+    # problem is on the UM grid when have points at +/- 90. I assume there are 1/2 the normal size.
+    # something like this (s.latitude+np.roll(s.latitude,1))/2 sort of does it.
+    # so compute bottom and top bounds than do the integration (sin(top)-sin(bottom))
+    # clip bottom and top at +/-pi/2 (or sin at -1,1)
+    lon_bounds = np.expand_dims(np.deg2rad(longitude_bounds),axis=1)
+    sin_lat_bounds = np.expand_dims(np.sin(np.deg2rad(latitude_bounds)),axis=0) # sin neeed
+    area_wt = (lon_bounds[:,:, 1] - lon_bounds[:, :,0]) * \
+              (sin_lat_bounds[:, :, 0] - sin_lat_bounds[:,:, 1]) * radius_earth ** 2
+    # convert back to xarray datarray
+    area_wt = xarray.DataArray(area_wt,
+                               coords=dict(longitude=lon,latitude=lat))
+    return area_wt
 def forceFeedback(delta_CO2=None, CO2=2):
     """
     Compute forcing and feedback from 2xCO2 (or 4xCo2) experiments.
@@ -813,6 +880,8 @@ def NCtoDF(files, jsonFile, column_rename=None, index_rename=None, verbose=False
 
 
 # end of NCtoDF
+
+
 def pp_time(tspp, ycoord=True):
     """
     Generate time values for pp field
@@ -1284,7 +1353,6 @@ def comp_fit(cubeIn, order=2, year=np.array([109, 179]), x=None, bootstrap=None,
     # need to figure out which co-ord is time..
     coordNames = [c.standard_name for c in cube.coords()]
 
-
     time_points = cube.coord('year').core_points()
     data = cube.data
     if cube.ndim == 1:
@@ -1378,13 +1446,35 @@ def jitterScatter(df, ax, colours=None, marker='o', s=10):
     return ax
 
 
+def um_long_name(ds, verbose=False, duplicate_Fail=False):
+    """
+    Generate dict with long_name as key and value the dataArray for that variable.
+    This makes it easy to look up variables by their long_name
+    :param ds -- a dataset generated from the UM  likely using um_to_nc
+    :param verbose -- be verbose if True (default is False)
+    :param duplicate_Fail -- fail if duplicate long_name found.
+    """
+    lookup = dict()
+    for var in ds.variables:
+        key = ds[var].attrs.get('long_name')
+        if duplicate_Fail and (key in lookup):
+            raise Exception(f"Duplicate long name found {key} for var:{var}")
+
+        if key is not None:  # got a long name
+            lookup[key] = ds[var]
+            if verbose:
+                print(f"{var} -> {key}")
+
+    return lookup
+
+
 ## make a label object
 class plotLabel:
     """
     Class for plotting labels on sub-plots
     """
 
-    def __init__(self, upper=False, roman=False):
+    def __init__(self, upper=False, roman=False,fontdict={}):
         """
         Make instance of plotLabel class
         parameters:
@@ -1403,6 +1493,7 @@ class plotLabel:
 
         self.strings = strings[:]
         self.num = 0
+        self.fontdict=fontdict
 
     def label_str(self):
         """
@@ -1425,7 +1516,7 @@ class plotLabel:
         else:
             plt_axis = ax
         try:
-            if plt_axis.size > 1: # got more than one element
+            if plt_axis.size > 1:  # got more than one element
                 for a in plt_axis.flatten():
                     self.plot(ax=a, where=where)
                 return
@@ -1433,7 +1524,6 @@ class plotLabel:
             pass
 
         # now go and do the actual work!
-
 
         text = self.label_str()
         if where is None:
@@ -1443,4 +1533,154 @@ class plotLabel:
             (x, y) = where
 
         plt_axis.text(x, y, text, transform=plt_axis.transAxes,
-                      horizontalalignment='right', verticalalignment='bottom')
+                      horizontalalignment='right', verticalalignment='bottom',fontdict=self.fontdict)
+
+
+"""
+Taylor diagram (Taylor, 2001) test implementation.
+
+http://www-pcmdi.llnl.gov/about/staff/Taylor/CV/Taylor_diagram_primer.htm
+Modified by Simon Tett, 2016 & 2021.
+"""
+
+__version__ = "Time-stamp: <2012-02-17 20:59:35 ycopin>"
+__author__ = "Yannick Copin <yannick.copin@laposte.net>"
+
+import numpy as NP
+import matplotlib.pyplot as PLT
+import matplotlib.ticker as ticker
+
+
+class TaylorDiagram(object):
+    """Taylor diagram: plot model standard deviation and correlation
+    to reference (data) sample in a single-quadrant polar plot, with
+    r=stddev and theta=arccos(correlation).
+    """
+
+    def __init__(self, refstd=1.0, fig=None, rect=111, sdConts=None, label='_', theta_range=None, sd_range=None):
+        """Set up Taylor diagram axes, i.e. single quadrant polar
+        plot, using mpl_toolkits.axisartist.floating_axes. refstd is
+        the reference standard deviation to be compared to.
+
+        :param refstd: reference value. Optional with default 1
+
+        :param fig (optional) Default is None and a new figure will be created if not specified.
+        :param rect (optional) sub-figure placement. Default is 111
+        :param label (optional) label.
+        """
+
+        from matplotlib.projections import PolarAxes
+        import mpl_toolkits.axisartist.floating_axes as FA
+        import mpl_toolkits.axisartist.grid_finder as GF
+        import matplotlib.pyplot as plt
+
+        self.refstd = refstd  # Reference standard deviation
+
+        if fig is None:
+            fig = plt.gcf()
+            # fig = PLT.figure()
+
+        tr = PolarAxes.PolarTransform()
+
+        # Correlation labels
+        rlocs = NP.concatenate((NP.arange(10) / 10., [0.95, 0.99]))
+        tlocs = NP.arccos(rlocs)  # Conversion to polar angles
+        gl1 = GF.FixedLocator(tlocs)  # Positions
+        labels = dict(zip(tlocs, map(str, rlocs)))
+        tf1 = GF.DictFormatter(labels)
+        # Standard deviation axis extent
+        gl2 = GF.MaxNLocator(6) # RMSE
+        if theta_range is not None:
+            self.theta_min =theta_range[0]
+            self.theta_max = theta_range[1]
+        else:
+            self.theta_min =0.0
+            self.theta_max = NP.pi/2
+
+        if sd_range is not None:
+            self.smin = sd_range[0]
+            self.smax  = sd_range[1]
+        else:
+            self.smin = 0.0
+            self.smax = 1.5 * self.refstd
+
+
+        extremes = (self.theta_min, self.theta_max,  # 1st quadrant
+                         self.smin, self.smax)
+
+        ghelper = FA.GridHelperCurveLinear(tr,
+                                           extremes=extremes,
+                                           grid_locator1=gl1,
+                                           grid_locator2=gl2,
+                                           tick_formatter1=tf1,
+                                           tick_formatter2=None
+                                           )
+
+
+        ax = FA.FloatingSubplot(fig, rect, grid_helper=ghelper)
+        fig.add_subplot(ax)
+
+        # Adjust axes
+        ax.axis["top"].set_axis_direction("bottom")  # "Angle axis"
+        ax.axis["top"].toggle(ticklabels=True, label=True)
+        ax.axis["top"].major_ticklabels.set_axis_direction("top")
+        ax.axis["top"].label.set_axis_direction("top")
+        ax.axis["top"].label.set_text("Correlation")
+
+        ax.axis["left"].set_axis_direction("bottom")  # "X axis"
+        ax.axis["left"].label.set_text("Normalised Std. Dev.")
+        # ax.axis['left'].xticklabel_format(style='plain')
+
+        ax.axis["left"].toggle(ticklabels=True)
+
+        ax.axis["right"].set_axis_direction("top")  # "Y axis"
+        ax.axis["right"].toggle(ticklabels=True)
+        ax.axis["right"].major_ticklabels.set_axis_direction("left")
+        ax.axis["bottom"].set_visible(False)  # Useless
+        #ax.axis["right"].set_visible(False)
+
+        # Contours along standard deviations
+        ax.grid(False)
+
+        self._ax = ax  # Graphical axes
+        self.ax = ax.get_aux_axes(tr)  # Polar coordinates
+
+        # Add reference point and stddev contour
+        # print "Reference std:", self.refstd
+        l, = self.ax.plot([0], self.refstd, 'k*',
+                          ls='', ms=10, label=label)
+        if sdConts is None:
+            sdC = [self.refstd]
+        else:
+            sdC = sdConts
+
+        for sd in sdC:
+            t = NP.linspace(self.theta_min, self.theta_max)
+            r = NP.zeros_like(t) + sd
+            self.ax.plot(t, r, 'k--', label='_')
+
+        # Collect sample points for latter use (e.g. legend)
+        self.samplePoints = [l]
+
+    def add_sample(self, stddev, corrcoef, *args, **kwargs):
+        """Add sample (stddev,corrcoeff) to the Taylor diagram. args
+        and kwargs are directly propagated to the Figure.plot
+        command."""
+
+        l, = self.ax.plot(NP.arccos(corrcoef), stddev,
+                          *args, **kwargs)  # (theta,radius)
+        self.samplePoints.append(l)
+
+        return l
+
+    def add_contours(self, levels=5, **kwargs):
+        """Add constant centered RMS difference contours."""
+
+        rs, ts = NP.meshgrid(NP.linspace(self.smin, self.smax),
+                             NP.linspace(self.theta_min, self.theta_max))
+        # Compute centered RMS difference
+        rms = NP.sqrt(self.refstd ** 2 + rs ** 2 - 2 * self.refstd * rs * NP.cos(ts))
+
+        contours = self.ax.contour(ts, rs, rms, levels, **kwargs)
+
+        return contours
