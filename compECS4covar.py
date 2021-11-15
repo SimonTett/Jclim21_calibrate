@@ -370,6 +370,9 @@ rows = ['NoIce', 'NoIceR', '14P', '14PR']  # no TCR values defined
 mn.loc[rows, cols] = np.nan
 sd = pd.DataFrame(sd)
 
+## save the data for subsequent use
+mn.to_csv(PaperLib.dataPath/'mn_change.csv')
+sd.to_csv(PaperLib.dataPath/'sd_change.csv')
 ## What to plot for final calculations.
 keys = ['7P', '14P', '7PR', '14PR', 'NoIce', 'NoIceR', 'SigP', 'SigPR']
 # keysPlot = [keys[k] for k in [0,2,4,6,8,10,5,11]]
@@ -467,7 +470,7 @@ fig.show()
 PaperLib.saveFig(fig)
 
 ## Make some Supp Figures...
-# plot the relationship between TCR4 and ctl temp.
+
 figScatter, axis = plt.subplots(1, 2, num='ScatterTCR', clear=True, figsize=PaperLib.fsize)
 (axSim, axJac) = axis
 
