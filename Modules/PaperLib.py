@@ -27,15 +27,13 @@ except ImportError:
 
 import iris
 
-print("Iris version is", iris.__version__)
-
 import matplotlib as mpl
 # mpl.use('QT4Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import iris.coord_categorisation
-import iris.fileformats.pp as pp  # need to do iris stuff after importing PaperLib which fixes problems with iris load.
+import iris.fileformats.pp as pp
 import iris.util
 
 # import StudyConfig
@@ -83,10 +81,13 @@ import platform
 
 if platform.uname()[1] in ['GEOS-D-0892']:  # where we need to get data from other places
     OptClimPath = pathlib.Path(r'\\csce.datastore.ed.ac.uk\csce\geos\groups\OPTCLIM')  # Datastore.
-    DFOLSpath = pathlib.Path(r'\\csce.datastore.ed.ac.uk\csce\geos\groups\OPTCLIM\DFOLS19')  # datastore
+elif 'geos.ed.ac.uk' in platform.uname()[1]:
+    OptClimPath = pathlib.Path(r'/exports/csce/datastore/geos/groups/OPTCLIM')  # Datastore.
 else:
     OptClimPath = pathlib.Path('c:/users/stett2/data/optclim')
-    DFOLSpath = pathlib.Path(r'c:/users/stett2/data/optclim/DFOLS19')
+
+DFOLSpath = OptClimPath/'DFOLS19'
+
 
 rootData = OptClimPath / 'data_files'
 time_cache = os.path.join(os.path.expanduser("~"), 'time_cache')  # where midl processed data lives
@@ -117,6 +118,140 @@ fsize = (11.8, 7.2)
 col2xCO2 = 'green'
 col4xCO2 = 'blue'
 
+def dfInv(df, rcond=1e-15, pseudoInv=True):
+    """
+    Compute inverse using np.linalg.pinv wrapping things backup as a dataframe...
+    :param df: dataframe
+    :param rcond -- rcond value for pinv
+    :param pseudoInv (Defualt True) if True use Pseudoinv else use normal inverse
+    :return: return inverse
+    """
+
+    if pseudoInv:
+        inv = np.linalg.pinv(df, rcond=rcond)
+    else:
+        inv = np.linalg.inv(df)
+    inv = pd.DataFrame(inv, index=df.index, columns=df.columns)
+    return inv
+
+
+def dfEig(df):
+    """
+    Compute eigenvalues using np.linalg.eig wrapping things backup as a dataframe...
+    :param df: dataframe
+    :return: return eigenValues and eigenVectors as dataframes
+    """
+
+    eigenValues, eigenVectors = np.linalg.eig(df)
+    col = np.arange(0, len(eigenValues))
+    eigenVectors = pd.DataFrame(eigenVectors, index=df.index, columns=col)
+    eigenValues = pd.Series(eigenValues, index=col)
+    return eigenValues, eigenVectors
+
+
+def dfDiag(df):
+    """
+    Return diagonal of df as Series
+    :param df: dataframe
+    :return: Diagonal dataframe
+    """
+
+    result = pd.Series(np.diag(df), index=df.columns)
+    return result
+
+def compParamCov(obsCov, jacAtm):
+    """
+    Compute the parameter covariance error
+    :param obsCov: observational error -- should include obs error + 2x internal var.
+    :param jacAtm: Atmospheric Jacobian
+    :return: parameter covariance
+    """
+
+    invCov = dfInv(obsCov,pseudoInv=False)
+    invCov = jacAtm @ invCov
+    Hessian = invCov @ jacAtm.transpose()  # matrix to be inverted
+    invM = dfInv(Hessian,pseudoInv=False)
+    transMat = invM @ invCov  # transformation matrix
+    paramCov = (transMat.dot(obsCov)).dot(transMat.T)  # covariance of parameters
+
+    return paramCov
+
+def combCovar(multiNorm1, multiNorm2):
+    """
+    Combine two multi-normal distributions using the standard bayesian formula
+    see https://en.wikipedia.org/wiki/Conjugate_prior
+    :param multiNorm1: a scipy.stats.multi_normal object
+    :param multiNorm2:a scipy.stats.multi_normal object
+    :return: scipy.stats.multi_normal object
+    """
+    invFn = np.linalg.pinv
+    precision1 = invFn(multiNorm1.cov)
+    precision2 = invFn(multiNorm2.cov)
+
+    covar = invFn(precision1 + precision2)
+    mn = covar @ ((precision1 @ multiNorm1.mean) + (precision2 @ multiNorm2.mean))
+    return scipy.stats.multivariate_normal(mean=mn, cov=covar,allow_singular=True)
+
+def compPredictionVar(jacobian, paramNorm, stdParam, stdValues):
+    """
+    Compute the covariance of predictions
+     :param jacobian: Jacobian being used.
+    :param paramNorm: frozen scipy.stats.multivariate_normal object for the multi-variate distribution of the parameters.
+    :param stdParam: standard parameter setting.
+    :param stdValues: Standard values (of whatever jacobian is)
+
+    :return: a scipy.stats.multivariate_normal object with the mean and std dev of
+    """
+    mn = stdValues + jacobian.transpose() @ (stdParam - paramNorm.mean)
+    cov = (jacobian.values.T @ paramNorm.cov) @ jacobian.values
+    return scipy.stats.multivariate_normal(mean=mn, cov=(cov+cov.T)/2., allow_singular=True)
+
+def limitParamCov(paramDist, stdParam, stdValues, jacobian, minSamp=1000, paramLimit=[0,1], verbose=False):
+    """
+    Compute the covariance of the coupled model when parameters are limited to (by default) (0,1)
+    :param paramDist: scipy.stats.multivariate_normal object -- multi-variate normal dist of parameter values.
+    :param stdParam: standard parameters
+    :param stdValues: standard model values
+    :param jacobian: Jacobian of d model values/ d param
+    :param minSamp: Minimum number of samples to generate.
+    :param paramLimit: Limits on params -- default is 0,1.
+    :param verbose: Optional -- default False. If True be a bit verbose.
+    :return: a multivariate normal dist.
+    """
+
+    np.random.seed(123456)  # always make sure have the same RNG seed
+
+    sampCount = 0  # no of samples
+    nSamp = int(minSamp) # initial estimate of how many samples to generate
+
+    samp = np.zeros((0, len(stdParam)))
+    cnt = np.zeros(len(stdParam))  # total number of OK samples for each parameter
+    nGen = 0  # no of samples generated
+
+    while sampCount < minSamp:
+        lsamp = paramDist.rvs(nSamp)
+        nGen += nSamp  # running count of how many samples have been generated.
+        L = ((lsamp >= paramLimit[0]) & (lsamp <= paramLimit[1]))  # where all generated values are OK
+        cnt += L.sum(0)  # increment count of OK for individual parameters
+        OK = L.all(axis=1)  # good cases
+        sampCount += OK.sum()  # total no of samples we've generated.
+        samp = np.append(samp, lsamp[OK, :], 0)  # list of OK samples!
+        nSamp *= 10  # next time generate 10 times as many.
+
+    fractParamOK = cnt / float(nGen)  # what fraction of parameters are good..
+    fractOK = sampCount / float(nGen)  # what fraction of samples are good
+    if verbose:
+        print(f"Sample Fract. {fractOK} Paramfract: {fractParamOK} ")
+    # compute the (linear) climate change for the  cases in the range 0..1
+
+    samp = pd.DataFrame(samp, columns=stdParam.index)  # convert all samples into dataFrame
+    change = (samp - stdParam) @ jacobian  # compute the linear sensitivity
+    covDelta = np.cov(change.transpose())  # compute covariance
+    result = scipy.stats.multivariate_normal(mean=stdValues + change.mean(), cov=covDelta, allow_singular=True)
+
+    return result
+
+
 def sym_colors(df, text=False):
     """
     Return a list of colours
@@ -124,7 +259,7 @@ def sym_colors(df, text=False):
     :param text if True (Default is False) return text colour.
     """
 
-    ens_colours = {'CMIP5': 'black', 'CMIP6': 'cornflowerblue', 'CE7': 'grey', 'DF14': 'orange',
+    ens_colours = {'CMIP5': 'darkBlue', 'CMIP6': 'cornflowerblue', 'CE7': 'grey', 'DF14': 'orange',
                    'CE14': 'indianred',
                    'ICE': 'grey'}
     ens_text_colours = {'CMIP5': 'black', 'CMIP6': 'darkblue', 'CE7': 'black', 'DF14': 'black',
