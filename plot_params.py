@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import matplotlib.gridspec as gridspec
-import collections
+
 # import study
 
 import StudyConfig
@@ -24,7 +24,7 @@ args = parser.parse_args()  # and parse the arguments
 nStudies = 0
 if not args.skipread:
 
-    studies = collections.OrderedDict()
+    studies = {}
     allTs7Data = PaperLib.read_data(sevenParam=True)
     allTs14Data = PaperLib.read_data(fourteenParam=True)
     allTsSens = PaperLib.read_data(sensCases=True)
@@ -116,8 +116,20 @@ ax.get_xaxis().set_visible(True)
 fig.tight_layout()
 fig.show()
 PaperLib.saveFig(fig, "params")
-# print out the stdev of the parameters for the 7 parameter cases.
+# print out the stdev of the parameters for the 7 parameter cases and genetae
 p7 = pd.DataFrame(
     [s.optimumParams(paramNames=paramNames, normalise=True).rename(k) for k, s in studies.items() if ('HadAM3-7' in k)])
 print("Norm param std dev \n", p7.std())
 print("Norm mean - std \n", (p7.mean() - refCase.standardParam(paramNames=paramNames, scale=True)) / p7.std())
+pall = pd.DataFrame(
+    [s.optimumParams(paramNames=paramNames, normalise=True).rename(k) for k, s in studies.items() if k != 'Long Control'])
+
+pDFOLS = pd.DataFrame(
+    [s.optimumParams(paramNames=paramNames, normalise=True).rename(k) for k, s in studies.items() if k.startswith('HadAM3-DFO14')])
+
+## print out number of cases where near boundaries..
+edges = [0.005,0.995]
+DFOLS_edge = (((pDFOLS <edges[0]) | (pDFOLS >edges[1])).sum()/5).rename('DF14')
+CE7_edge = (((p7[sevenParams] <edges[0]) | (p7[sevenParams] >edges[1])).sum()/10).rename('CE7')
+ds=pd.DataFrame([CE7_edge,DFOLS_edge])
+print(ds.T)
