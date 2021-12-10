@@ -12,7 +12,6 @@ test = False
 skipRead = False
 import xarray
 import PaperLib
-import collections
 
 xarray.set_options(keep_attrs=True)
 
@@ -46,13 +45,39 @@ def taylor(sim_ds, obs_ds):
     return result
 
 
+def comp_mn(row):
+    """
+    Compute mean of atmosphere Run #1 & #2, rename variables and 
+    aspply L/S mask to land temperature & precip
+    """
+    rename = dict(air_pressure_at_sea_level='air_pressure_at_mean_sea_level',
+              air_temperature='air_temperature_tas',
+              air_temperature_2='air_temperature_500',
+              relative_humidity_2='relative_humidity')
+    mn_file = '_2000_2005_mn.nc'
+    # need to convert "windows" paths to posix paths
+    p1 = taylor_diag / row['Atmosphere Run#1'].replace('\\','/')
+    p2 = taylor_diag / row['Atmosphere Run#2'].replace('\\','/')
+    p1 = p1 / (p1.name + mn_file)
+    p2 = p2 / (p2.name + mn_file)
+    if not p1.exists():
+        print(p1,"does not exist")
+    if not p2.exists():
+        print(p2,"does not exist")
+
+    mn_data = ((xarray.load_dataset(p1) + xarray.load_dataset(p2)) / 2).rename(rename)
+    # and fix the surface temperature & precip
+    return msk_sfc(mn_data, ls_mask)
+
+
+
 def msk_sfc(ds, ls_msk, variables=None):
     """
     Apply a mask to surface variables in a ds
     :param ds: dataset
     :param ls_msk: ls_msk 1 = land; 0 = sea
     :param variables: list of variables to mask. Default is air_temperature & precipitation_flux
-    :return: masked ds
+   :return: masked ds
     """
 
     if variables is None:
@@ -213,7 +238,8 @@ if test:
 
 if not skipRead:
     CMIP5 = read_cmip(CMIP5_files, ls_mask, default='Unknown CMIP5', verbose=verbose)
-    CMIP5['CMIP5-MM'] = xarray.combine_nested([ds.drop_vars('average_DT', errors='ignore') for ds in CMIP5.values()],'model').mean('model')
+    lst = [ds.drop_vars(['average_DT','plev_bnds'], errors='ignore') for ds in CMIP5.values()]
+    CMIP5['CMIP5-MM'] = xarray.combine_nested(lst,'model').mean('model')
     CMIP6 = read_cmip(CMIP6_files, ls_mask, default='Unknown CMIP6', verbose=verbose)
     # dealing with missing variables for MM mean...
     mm=dict()
@@ -230,26 +256,16 @@ worked = runInfo.Status == 'Succeeded'  # ones that worked
 runInfo = runInfo[worked]
 # DFOLS first
 DFOLS = dict()
-mn_file = '_2000_2005_mn.nc'
-rename = dict(air_pressure_at_sea_level='air_pressure_at_mean_sea_level',
-              air_temperature='air_temperature_tas',
-              air_temperature_2='air_temperature_500',
-              relative_humidity_2='relative_humidity')
-
-
-def comp_mn(row):
-    p1 = taylor_diag / row['Atmosphere Run#1']
-    p2 = taylor_diag / row['Atmosphere Run#2']
-    p1 = p1 / (p1.name + mn_file)
-    p2 = p2 / (p2.name + mn_file)
-    mn_data = ((xarray.load_dataset(p1) + xarray.load_dataset(p2)) / 2).rename(rename)
-    # and fix the surface temperature & precip
-    return msk_sfc(mn_data, ls_mask)
-
 
 for s, row in runInfo.query('Ensemble=="DF14"').iterrows():
     DFOLS[s] = comp_mn(row)
 DFOLS['DFOLS-MM'] = xarray.concat(DFOLS.values(),'model').mean('model')
+
+# and the CE7
+CE7 = dict()
+for s, row in runInfo.query('Ensemble=="CE7"').iterrows():
+    CE7[s] = comp_mn(row)
+CE7['CE7-MM'] = xarray.concat(CE7.values(),'model').mean('model')
 
 
 # and do the standard case
@@ -275,9 +291,18 @@ series = []
 for k, v in DFOLS.items():
     sim = v.drop_vars('average_DT', errors='ignore')
     series.append(taylor(v, obs_ds).rename(k))
-# wrap in the standard run.
 
 DFOLS_df = pd.DataFrame(series)
+
+
+# then CE7 from HadAM3
+series = []
+for k, v in CE7.items():
+    sim = v.drop_vars('average_DT', errors='ignore')
+    series.append(taylor(v, obs_ds).rename(k))
+
+CE7_df = pd.DataFrame(series)
+# finally teh standard HadAM3 case
 standard_series = taylor(standard, obs_ds).rename('Standard')
 
 # write things out.
@@ -285,4 +310,5 @@ standard_series = taylor(standard, obs_ds).rename('Standard')
 CMIP6_df.to_csv(PaperLib.dataPath / 'CMIP6_taylor.csv')
 CMIP5_df.to_csv(PaperLib.dataPath / 'CMIP5_taylor.csv')
 DFOLS_df.to_csv(PaperLib.dataPath / 'DFOLS_taylor.csv')
+CE7_df.to_csv(PaperLib.dataPath / 'CE7_taylor.csv')
 standard_series.to_csv(PaperLib.dataPath / 'Standard_taylor.csv')
