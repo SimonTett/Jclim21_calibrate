@@ -10,6 +10,12 @@ import seaborn as sns
 import scipy.stats
 import adjustText  # library to adjust text boxes so they don't overlap.  conda install -c conda-forge adjusttext
 
+# vars to change for sens studies
+
+
+corrCov = False  # if True produce a correlated covariance. Used in Sensitivity study
+scaleNonRad = None  # How much to scale each element of the non radiation obs error covariance elements. None means no scaling. Also used in sens
+scaleAll = None # how much to scale the covariance elements
 
 def extIndx(df, name):
     """
@@ -26,47 +32,10 @@ def extIndx(df, name):
     return result
 
 
-def dfInv(df, rcond=1e-15):
-    """
-    Compute inverse (using pinv) wrapping things backup as a dataframe...
-    :param df: dataframe
-    :return: return inverse
-    """
-
-    inv = np.linalg.pinv(df, rcond=rcond)
-    inv = pd.DataFrame(inv, index=df.index, columns=df.columns)
-    return inv
-
-
-def dfeig(df):
-    """
-    Compute inverse (using pinv) wrapping things backup as a dataframe...
-    :param df: dataframe
-    :return: return inverse
-    """
-
-    eigenValues, eigenVectors = np.linalg.eig(df)
-    col = np.arange(0, len(eigenValues))
-    eigenVectors = pd.DataFrame(eigenVectors, index=df.index, columns=col)
-    eigenValues = pd.Series(eigenValues, index=col)
-    return eigenValues, eigenVectors
-
-
-def dfDiag(df):
-    """
-    Return diagonal of df as Series
-    :param df: dataframe
-    :return: Diagonal
-    """
-
-    result = pd.Series(np.diag(df), index=df.columns)
-    return result
-
-
 def coupUncert(covErr, deltaParam, paramSamp, nSampRef=1, paramZero=None):
     """
     Compute uncertainty due, to random error in the Jacobian estimate.
-    :param covErr: error covariance. -- a pandada dataframe with the same index and column values. Size MxM
+    :param covErr: error covariance. -- a pandas dataframe with the same index and column values. Size MxM
     :param deltaParam: Param delta -- a pandas series Size P
     :param paramSamp: Sampled parameters. -- index is sample number, column parameter size NxP
     :return: sampled set. Size N*M
@@ -103,102 +72,11 @@ def coupUncert(covErr, deltaParam, paramSamp, nSampRef=1, paramZero=None):
     return sampUncert, (mean, cov)
 
 
-def compParamCov(obsCov, jacAtm):
-    """
-    Compute the parameter covariance error
-    :param obsCov:
-    :param jacAtm:
-    :return: parameter covariance
-    """
-
-    invCov = dfInv(obsCov)
-    invCov = jacAtm @ invCov
-    Hessian = invCov @ jacAtm.transpose()  # matrix to be inverted
-    invM = dfInv(Hessian)
-    transMat = invM @ invCov  # transformation matrix
-    paramCov = (transMat.dot(covErr)).dot(transMat.T)  # covariance of parameters
-
-    return paramCov
-
-
-def compPredictionVar2(jacCoup, paramNorm, stdParam, stdCoup):
-    """
-    Compute the covariance of predictions
-    :param jacCoup: Coupled Jacobian
-    :param paramNorm: frozen scipy.stats.multivariate_normal object
-    :param stdMn: standard parameter setting.
-    :return: a scipy.stats.multivariate_normal object with the mean and std dev.
-    """
-    mn = stdCoup + jacCoup.transpose() @ (stdParam - paramNorm.mean)
-    cov = (jacCoup.values.T @ paramNorm.cov) @ jacCoup.values
-    return scipy.stats.multivariate_normal(mean=mn, cov=cov, allow_singular=True)
-
-
-def limitParamCov2(paramDist, stdParam, stdCoup, jacCoup, minSamp=1000, verbose=False):
-    """
-    Compute the covariance of the coupled model when parameters are limited to 0..1
-    :param paramDist: scipy.stats.multivariate_normal object -- will be used to generate samples
-    :param stdParam: standard parameters
-    :param stdCoup: standard model coupled response
-    :param minSamp: Minimum number of samples to generate.
-    :param verbose: Optional -- default False. If True be a bit verbose.
-    :return: a multivariate normal dist.
-    """
-
-    numpy.random.seed(123456)  # always make sure have the same RNG seed
-
-    sampCount = 0  # no of samples
-    nSamp = int(minSamp)
-
-    samp = np.zeros((0, len(stdParam)))
-    cnt = np.zeros(len(stdParam))  # total number of OK samples for each parameter
-    nGen = 0  # no of samples generated
-
-    while sampCount < minSamp:
-        lsamp = paramDist.rvs(nSamp)
-        nGen += nSamp  # running count of how many samples have been generated.
-        L = ((lsamp >= 0.0) & (lsamp <= 1.0))  # where those are OK
-        cnt += L.sum(0)  # increment count of OK for individual parameters
-        OK = L.all(axis=1)  # good cases
-        sampCount += OK.sum()  # total no of samples we've generated.
-        samp = np.append(samp, lsamp[OK, :], 0)  # list of OK samples!
-        nSamp *= 10  # next time generate 10 times as many.
-
-    fractParamOK = cnt / float(nGen)  # what fraction of parameters are good..
-    fractOK = sampCount / float(nGen)  # what fraction of samples are good
-    if verbose:
-        print(f"Sample Fract. {fractOK} Paramfract: {fractParamOK} ")
-    # compute the (linear) climate change for the good cases...
-
-    samp = pd.DataFrame(samp, columns=stdParam.index)  # make it a dataFrame
-    change = (samp - stdParam) @ jacCoup  # compute the linear climate sensitivity
-    covDelta = np.cov(change.transpose())  # compute covariance
-    result = scipy.stats.multivariate_normal(mean=stdCoup + change.mean(), cov=covDelta, allow_singular=True)
-
-    return result
-
-
-def combCovar(multiNorm1, multiNorm2):
-    """
-    Combine two multi-normal distributions using the standard bayesian formula
-    see https://en.wikipedia.org/wiki/Conjugate_prior
-    :param multiNorm1: a scipy.stats.multi_normal object
-    :param multiNorm2:a scipy.stats.multi_normal object
-    :return: scipy.stats.multi_normal object
-    """
-    invFn = np.linalg.pinv
-    precision1 = invFn(multiNorm1.cov)
-    precision2 = invFn(multiNorm2.cov)
-
-    covar = invFn(precision1 + precision2)
-    mn = covar @ ((precision1 @ multiNorm1.mean) + (precision2 @ multiNorm2.mean))
-    return scipy.stats.multivariate_normal(mean=mn, cov=covar)
 
 
 ## start of code.
 
-corrCov = False  # if True produce a correlated covariance.
-scaleNonRad = None  # How much to scale each element of the non radiation obs error covariance elements. None means no scaling
+# study
 JMGensData = pd.read_csv(os.path.join('data', 'JMG_ens_data.csv'), index_col=0)  # read the ensemble data.
 # it is quite a small ensemble and missing the land precip...
 ECSrename = {'ECS_4xCO2': 'sat', 'ts_tppn_4xCO2': 'precip'}
@@ -259,6 +137,10 @@ if scaleNonRad is not None:
         covObsErr.loc[L, :] *= np.sqrt(scaleNonRad)  # scale columns
         covObsErr.loc[:, L] *= np.sqrt(scaleNonRad)  # and rows
 
+if scaleAll is not None: # scale everything
+    covObsErr *= scaleAll
+    figName += '_scaleAll'
+
 covErr = covObsErr + 2 * covIntVar
 
 sdIntVar = np.sqrt(np.diag(covIntVar))
@@ -279,7 +161,7 @@ ECSindx = ecs.sort_values(ascending=False).index
 jacTCR = jacobianTCR.runJacobian(normalise=True).Jacobian.reindex(parameter=pp, Observation=TCRobs).to_pandas()
 jacTCR = jacTCR.fillna(0.0)  # set all nan to 0
 
-delta = (jacECS.transpose() * deltaParam).transpose() / np.sqrt(dfDiag(ECScov))  # 1 member ensemble for clim-sens
+delta = (jacECS.transpose() * deltaParam).transpose() / np.sqrt(PaperLib.dfDiag(ECScov))  # 1 member ensemble for clim-sens
 Lsmall = abs(delta.loc[:, 'sat']) < 1  # (10-90%)
 paramSig = delta[Lsmall].index.values
 
@@ -291,7 +173,6 @@ postDistTCR4 = {}  # estimated posterior distributions for TCR4
 sevenParams = pp[0:7]
 for paramNames, paramTitle in zip([sevenParams, pp[0:13], pp, pp], ['7P', 'NoIce', '14P', 'SigP']):
     jacAtm = jacobianAtm.runJacobian(normalise=True).Jacobian
-    # jacAtmVar = jacobianAtm.runJacobian(normalise=True).Jacobian_var
     jacAtm = jacAtm.sel(parameter=paramNames, Observation=obsNames).to_pandas()  # convert to DataFrame
     # get coupled values
     jacECS = jacobianECS.runJacobian(normalise=True).Jacobian.sel(parameter=paramNames, Observation=ECSobs).to_pandas()
@@ -316,20 +197,20 @@ for paramNames, paramTitle in zip([sevenParams, pp[0:13], pp, pp], ['7P', 'NoIce
     stdParam = config.standardParam(paramNames=paramNames, scale=True)
     stdParam = stdParam.reindex(jacECS.index)
     # deltaParam = jacobianECS.steps(paramNames=paramNames,normalise=True)
-    paramCov = compParamCov(covErr, jacAtm)
+    paramCov = PaperLib.compParamCov(covErr, jacAtm)
     # combine with prior for restricted calculation
     npt = paramCov.shape[0]
     prior = scipy.stats.multivariate_normal(mean=np.ones(npt) * 0.5, cov=1)  # prior on normalised parameters is broad.
     obsParam = scipy.stats.multivariate_normal(mean=stdParam, cov=paramCov)  # obs param  covariance.
-    prior = combCovar(prior, obsParam)  # prior distribution on parameters used in restricted calculation
+    prior = PaperLib.combCovar(prior, obsParam)  # prior distribution on parameters used in restricted calculation
 
     # compute TCR posterior dist
-    posteriorTCR = compPredictionVar2(jacTCR, obsParam, stdParam, stdTCR)
-    posteriorTCRR = limitParamCov2(prior, stdParam, stdTCR, jacTCR)
+    posteriorTCR = PaperLib.compPredictionVar(jacTCR, obsParam, stdParam, stdTCR)
+    posteriorTCRR = PaperLib.limitParamCov(prior, stdParam, stdTCR, jacTCR)
 
     # and for 4xCO2
-    posteriorCoup = compPredictionVar2(jacECS, obsParam, stdParam, StdECS)
-    posteriorCoupR = limitParamCov2(prior, stdParam, StdECS, jacECS)
+    posteriorCoup = PaperLib.compPredictionVar(jacECS, obsParam, stdParam, StdECS)
+    posteriorCoupR = PaperLib.limitParamCov(prior, stdParam, StdECS, jacECS)
 
     postDist[paramTitle] = (obsParam, posteriorCoup, jacECS, posteriorTCR, jacTCR)
     postDist[paramTitle + "R"] = (prior, posteriorCoupR, jacECS, posteriorTCRR, jacTCR)
@@ -393,9 +274,9 @@ label = PaperLib.plotLabel()
 annot_kws = {'fontsize': 'x-small'}  # annotation control in sns.heatmap
 
 rotation = 45
-fig, ax = plt.subplots(2, 2, num=figName, figsize=[8.5, 6], clear=True)
-(axJacATm, axParamCov, axJac, axSens) = ax.flatten()
-axis = (axJacATm, axParamCov, axJac, axSens)
+fig, ax = plt.subplots(2, 2, num=figName, figsize=[8, 6], clear=True)
+(axJacATm, axParamCov, axJacTCR, axSens) = ax.flatten()
+axis = (axJacATm, axParamCov, axJacTCR, axSens)
 # plot titles & add labels.
 for a, title in zip(axis, ['Normalised Atmospheric Jacobian', r'Parameter Covariance $\times 10$',
                            'Normalised Coupled Jacobians', 'Linear Responses']):
@@ -404,7 +285,7 @@ for a, title in zip(axis, ['Normalised Atmospheric Jacobian', r'Parameter Covari
 
 # plot a heatmaps for the atm Jacobian and the param covariance matrix.
 #sns.set(font_scale=1)
-normJacAtm = jacAtm / np.sqrt(dfDiag(covErr))  # normalise by error.
+normJacAtm = jacAtm / np.sqrt(PaperLib.dfDiag(covErr))  # normalise by error.
 renameDict = PaperLib.shortNames(paramNames=normJacAtm.index, obsNames=normJacAtm.columns, mark=sevenParams)
 normJacAtm = normJacAtm.rename(index=renameDict, columns=renameDict)
 levels = [-100, -50, -20, -10, -5, -2, 2, 5, 10, 20, 50, 100]
@@ -447,10 +328,10 @@ jj = [postDist[case][2].loc[:, 'sat'].rename('ECS4')]  # extract ECS
 jj.append(postDist[case][4].loc[:, 'sat_TCR4'].rename('T140'))  # extract TCR
 jj = pd.DataFrame(jj)  # convert list of series into dataframe.
 jj = jj.rename(columns=renameDict)
-jj.T.plot.bar(ax=axJac, rot=rotation, color=['red', 'blue'], legend=True)
+jj.T.plot.bar(ax=axJacTCR, rot=rotation, color=['red', 'blue'], legend=True)
 
-axJac.set_ylabel("4xCO$_2$ warming")
-axJac.set_xlabel(None)
+axJacTCR.set_ylabel("4xCO$_2$ warming")
+axJacTCR.set_xlabel(None)
 # axJac.tick_params('x',bottom=False,labelbottom=False) # remove xticks
 
 # plot mean and uncertainty
@@ -471,57 +352,60 @@ PaperLib.saveFig(fig)
 
 ## Make some Supp Figures...
 
-figScatter, axis = plt.subplots(1, 2, num='ScatterTCR', clear=True, figsize=PaperLib.fsize)
-(axSim, axJac) = axis
+figScatter, axis = plt.subplots(1, 2, num='ScatterTCR', clear=True, figsize=[8.0,6],sharey='all')
+(axNetFlux, axJacTCR) = axis
 
 j = jacobianTCR.runJacobian(normalise=True).Jacobian.to_pandas().loc[:, ['sat_CTL', 'sat_TCR4']]
 j = j.rename(index=renameDict)
+jNet = jacobianAtm.runJacobian(normalise=True).Jacobian.to_pandas().loc[:,'netflux_global'].rename(renameDict)
+j = j.merge(jNet,left_index=True,right_index=True)
 steps = jacobianTCR.steps(normalise=True).rename(renameDict)
 jj = (j.T * steps).T
-err = 1.0 / steps * np.sqrt(2) * 0.06  # error
+err = 1.0 / steps * 0.06  # error -- 0.06 is estimate of coupled variability.
 
-j.plot.scatter('sat_CTL', 'sat_TCR4', ax=axJac, c='black', s=40, yerr=2 * err)
-axJac.set_xlabel(r'Normalised Control $\Delta$ GMSAT (K)')
-axJac.set_ylabel(r'Normalised $\Delta$ TCR4 (K)')
-axJac.set_title("Control GMSAT vs TCR4 Normalised Jacobian")
-axJac.set_ylim(-5.5, 5.5)
-axJac.set_xlim(-18, 18)
+j.plot.scatter('sat_CTL', 'sat_TCR4', ax=axJacTCR, c='black', s=40, yerr=2 * err, xerr=err)
+axJacTCR.set_xlabel(r'$\frac{\partial}{\partial P}$ GMSAT (K)')
+#axJacTCR.set_ylabel(r'Normalised $\Delta$ T140 (K)')
+axJacTCR.set_title("Normalised Jacobians of GMSAT vs TCR140")
+axJacTCR.set_ylim(-5.5, 5.5)
+axJacTCR.set_xlim(-18, 18)
 
 textList = []
 for indx, (n, r) in enumerate(j.iterrows()):
     xy = np.array((r.sat_CTL, r.sat_TCR4))
     textList.append(
-        axJac.text(xy[0], xy[1], r.name, ha='center', fontsize='small'))  ##,xy,xytext=xytext,arrowprops={'width':4}))
+        axJacTCR.text(xy[0], xy[1], r.name, ha='center', fontsize='small'))  ##,xy,xytext=xytext,arrowprops={'width':4}))
 
-fit = np.polyfit(j.sat_CTL, j.sat_TCR4, 1)
-xlim = axJac.get_xlim()
+fit = np.polyfit(j.sat_CTL, j.sat_TCR4, 1,w=1/err)
+print("Temp fit",fit)
+xlim = axJacTCR.get_xlim()
 x = np.linspace(xlim[0], xlim[1])
 y = fit[0] + fit[1] * x
-axJac.plot(x, y, linewidth=2, color='grey', alpha=0.5)
+axJacTCR.plot(x, y, linewidth=2, color='grey', alpha=0.5)
 # now adjust the text labels
-adjustText.adjust_text(textList, ax=axJac, autoalign='x')
+adjustText.adjust_text(textList, ax=axJacTCR, autoalign='x')
 
-# now plot the actual changes -- just multiply by actual change.
+# now plot netFlux vs T140
+j.plot.scatter('netflux_global', 'sat_TCR4', ax=axNetFlux, c='black', s=20, yerr=err * 2)
+axNetFlux.set_xlabel(r'$\frac{\partial}{\partial P}$ netflux (Wm$^{-2}$)')
+axNetFlux.set_ylabel(r'$\frac{\partial}{\partial P}$  T140 (K)')
+axNetFlux.set_title("Normalised Jacobians of Net flux vs T140")
 
-
-jj.plot.scatter('sat_CTL', 'sat_TCR4', ax=axSim, c='black', s=20, yerr=0.16)
-axSim.set_xlabel(r'Control $\Delta$ GMSAT (K)')
-axSim.set_ylabel(r'$\Delta$ TCR4 (K)')
-axSim.set_title("Simulated change in Control SAT and TCR4")
-
-axSim.set_xlim(-3, 3)
-axSim.set_ylim(-0.75, 0.75)
-textList = []
-for indx, (n, r) in enumerate(jj.iterrows()):
-    xy = np.array((r.sat_CTL, r.sat_TCR4))
-    textList.append(
-        axSim.text(xy[0], xy[1], r.name, ha='center', fontsize='small'))  ##,xy,xytext=xytext,arrowprops={'width':4}))
-
-xlim = axJac.get_xlim()
+axNetFlux.set_xlim(-40, 40)
+fit = np.polyfit(j.netflux_global, j.sat_TCR4, 1,w=1/err)
+print("Netflux fit",fit)
+xlim = axNetFlux.get_xlim()
 x = np.linspace(xlim[0], xlim[1])
-axSim.fill_between(x, -0.17, 0.17, color='grey', alpha=0.5)
+y = fit[0] + fit[1] * x
+axNetFlux.plot(x, y, linewidth=2, color='grey', alpha=0.5)
+textList = []
+for indx, (n, r) in enumerate(j.iterrows()):
+    xy = np.array((r.netflux_global, r.sat_TCR4))
+    textList.append(
+        axNetFlux.text(xy[0], xy[1], r.name, ha='center', fontsize='small'))  ##,xy,xytext=xytext,arrowprops={'width':4}))
+
 # now adjust the text labels
-adjustText.adjust_text(textList, ax=axSim, autoalign='x')
+adjustText.adjust_text(textList, ax=axNetFlux, autoalign='x')
 lab = PaperLib.label()
 for a in axis:
     PaperLib.plotLabel(a, lab)
