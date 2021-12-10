@@ -92,7 +92,7 @@ def plotValues(df, index, col, ax, normalise=None):
     """
 
     series = df.loc[:, col]
-    colors = sym_colors(df)
+    colors = PaperLib.sym_colors(df)
     ok = ~series.isnull()
     series = series[ok]
     colors = colors[ok]
@@ -114,47 +114,13 @@ def plotValues(df, index, col, ax, normalise=None):
     return None
 
 
-def sym_colors(df, text=False):
-    """
-    Return a list of colours
-    :param df -- the dataframe  -- needs to have Optimised & Ensemble and set
-    :param text if True (Default is False) return text colour.
-    """
-
-    ens_colours = {'CMIP5': 'black', 'CMIP6': 'cornflowerblue', 'CE7': 'grey', 'DF14': 'orange',
-                   'CE14': 'indianred',
-                   'ICE': 'grey'}
-    ens_text_colours = {'CMIP5': 'black', 'CMIP6': 'darkblue', 'CE7': 'black', 'DF14': 'black',
-                        'CE14': 'black',
-                        'ICE': 'black'}
-
-    optimise = dict(y='lightblue', n='red')  # force optimise to lowercase.
-
-    if text:
-        lookup_colours = ens_text_colours
-        stdColour = 'black'
-    else:
-        lookup_colours = ens_colours
-        stdColour = 'grey'
-    colours = dict()  # list of colors
-    for name, row in df.iterrows():
-        colour = lookup_colours.get(row.Ensemble)
-        if colour is None:
-            colour = optimise.get(str(row.Optimised).lower(), None)
-        if name == 'Standard':
-            colour = stdColour
-        colours[name] = colour
-
-    return pd.Series(colours, name='Colour')
-
-
 def scatter_values(df, xvar, yvar, ax):
     """
     Plot boxes and text
     :return: nada
     """
 
-    colours = sym_colors(df)
+    colours = PaperLib.sym_colors(df)
     text = df.loc[:, 'shortText']
     optimised = df.loc[:, 'Optimised']
     translate = {'Y': 'lightblue'}
@@ -270,12 +236,12 @@ def plot_var(dataframe, variance, ensembles, ax, var, title, xtitle, label=None,
     for index, ensemble in enumerate(ensembles):
         data = dataframe.query(f'Ensemble == "{ensemble}"')
         series = data.loc[:, var]
-        colors = sym_colors(data)
+        colors = PaperLib.sym_colors(data)
         boxprops = dict(facecolor=colors[0], alpha=0.5)
         whiskerprops = dict(linewidth=2, color=colors[0])
         size = sizes.get(ensemble, 12)
         marker = markers.get(ensemble, 'd')
-        textColor = sym_colors(data, text=True)
+        textColor = PaperLib.sym_colors(data, text=True)
         ok = ~series.isnull()  # where values are OK
         series = series[ok]
         colors = colors[ok]
@@ -540,7 +506,7 @@ for (varx, vary), title, (xtitle, ytitle), ax in zip(
         data = allData.query(f'Ensemble == "{ensemble}"')
         L = ~data.loc[:, varx].isnull()
         d = data[L]  # removed all missing data
-        colors = sym_colors(d)
+        colors = PaperLib.sym_colors(d)
         if ensemble == 'SS':
             scatter_values(d, varx, vary, ax)
         elif ensemble != 'ICE':
@@ -644,7 +610,7 @@ for ensemble in ['CMIP5', 'CMIP6', 'CE7', 'DF14']:
 ## plot the normalised differences
 f, ax = plt.subplots(1, 1, num='AMIP_NORM', clear=True, figsize=[8.2,6])
 obsNames = config.obsNames()
-plotSimDelta2(delta, ax, ['silver', 'cornflowerblue', 'black', 'orange'], obsNames)
+plotSimDelta2(delta, ax, ['darkBlue', 'cornflowerblue', 'grey', 'orange'], obsNames)
 # add plus or minus 2 lines
 for v in [-2, 2]:
     ax.axhline(v, color='black', linestyle='dashed', linewidth=2)
