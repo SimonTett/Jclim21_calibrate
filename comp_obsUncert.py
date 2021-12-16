@@ -1,6 +1,6 @@
 """
 Compute the uncertainty due to observations.
-Does this very simply by setting all values in covariance but the target to value * 1e6
+Does this very simply by setting all values in covariance but the target to value * 1e3
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -50,7 +50,7 @@ cov = config.Covariances(obsNames=obsNames, scale=True)
 jacobianTCR = StudyConfig.readConfig(studyPath / 'coupJac' / 'coupJac10pTCR_final.json')
 jacobianECS = StudyConfig.readConfig(studyPath / 'coupJac' / 'coupJac14p_try3_final.json')
 paramNames = jacobianTCR.paramNames()  # param names
-sevenParam = ['CT', 'EACF', 'ENTCOEF', 'RHCRIT', 'VF1', 'CW_LAND', 'ICE_SIZE'] # 7 param case.
+sevenParam = ['CT', 'EACF', 'ENTCOEF', 'RHCRIT', 'VF1', 'CW_LAND', 'ICE_SIZE']  # 7 param case.
 jacAtm = jacobianAtm.runJacobian(normalise=True).Jacobian
 jacAtm = jacAtm.sel(parameter=paramNames, Observation=obsNames).to_pandas()  # convert to DataFrame
 jacTCR = jacobianTCR.runJacobian(normalise=True).Jacobian. \
@@ -77,28 +77,50 @@ minSamp = 1000
 
 ## compute sens case when uncertainty is doubled = sqrt(2) and range increased to -0.5 1.5
 # do for 7param and SigPR case.
-cols=['ECS4','TCR','T140']
-for name, params in zip(['7PRx2','SigPRx2'],[sevenParam,paramNames]):
+cols = ['ECS4', 'TCR', 'T140']
+for name, params in zip(['7PRx2', 'SigPRx2', 'IceRx2', 'NoIceRx2'],
+                        [sevenParam, paramNames, paramNames, paramNames]):
     npts = len(params)
-    covErr = covObsErr + 2 * covIntVar
-    paramCov = PaperLib.compParamCov(covErr, jacAtm.loc[params,:])
-    # combine with prior on parameters or restricted calculation
-    obsParam = scipy.stats.multivariate_normal(mean=stdParam.loc[params], cov=paramCov,
-                                               allow_singular=True)  # obs param  covariance.
+    plimit = np.zeros([2, npts])
+    plimit[0, :] = -0.5
+    plimit[1, :] = 1.5
+    covParams = pd.DataFrame(np.diag(np.ones(npts)), index=params, columns=params)
+
+    if name == 'IceRx2':
+        indx = (np.array(params) == 'ALPHAM')
+        plimit[0, ~indx] = 0
+        plimit[1, ~indx] = 1  # set limits for params except ALPHAM back to 0,1
+        covParams = scale_cov(covParams, ALPHAM=2)  # increase all alpha cov values by 2 (=4 on the diagonal)
+    elif name == 'NoIceRx2': # restrict everything but ALPHAM
+        indx = (np.array(params) == 'ALPHAM')
+        plimit[0, indx] = 0
+        plimit[1, indx] = 1  # set limits for ALPHAM back to 0,1
+        pp = {param: 2 for param in params if param != 'ALPHAM'}
+        covParams = scale_cov(covParams, **pp)  # increase all alpha cov values by 2 (=4 on the diagonal)
+    else:
+        covParams *= 4  # diagonal and want twice...
     paramPrior2 = scipy.stats.multivariate_normal(mean=np.ones(npts) * 0.5,
-                                                  cov=np.sqrt(2))  # prior on normalised parameters is broad.
-    prior2 = PaperLib.combCovar(paramPrior2, obsParam)  # prior distribution on parameters used in restricted calculation
-    posteriorResp2 = PaperLib.limitParamCov(prior2, stdParam.loc[params], stdResp, jacResp.loc[params,:],
-                                            minSamp=minSamp, paramLimit=[-0.5, 1.5])
-    mn = pd.Series(posteriorResp2.mean,index=jacResp.columns)
-    sd = pd.Series(np.sqrt(np.diag(posteriorResp2.cov)),index=jacResp.columns)
-    cv = (sd/mn*100+0.05).astype(int)
-    print(name,end="& - &")
+                                                  cov=covParams)  # prior on normalised parameters is broad.
+
+    covErr = covObsErr + 2 * covIntVar
+    paramCov = PaperLib.compParamCov(covErr, jacAtm.loc[params, :])
+    # combine with prior on parameters or restricted calculation
+    obsParam = scipy.stats.multivariate_normal(mean=stdParam.loc[params], cov=paramCov)  # obs param  covariance.
+
+    prior2 = PaperLib.combCovar(paramPrior2,
+                                obsParam)  # prior distribution on parameters used in restricted calculation
+    posteriorResp2 = PaperLib.limitParamCov(prior2, stdParam.loc[params], stdResp, jacResp.loc[params, :],
+                                            minSamp=minSamp, paramLimit=plimit)
+    mn = pd.Series(posteriorResp2.mean, index=jacResp.columns)
+    sd = pd.Series(np.sqrt(np.diag(posteriorResp2.cov)), index=jacResp.columns)
+    cv = (sd / mn * 100 + 0.05).astype(int)
+    print(f"{name:10s}", end="& - &")
 
     for c in cols:
         print(f" $ {mn.loc[c]:3.2g} \\pm {sd.loc[c]:2.1g} ({cv.loc[c]:2d}\\%)$", end='&')
     print("\\\\")
 ##
+breakpoint()
 
 vars_radn = ['olr', 'rsr', 'netflux']  # raadn variables
 vars_trop = ['rh@500', 'temp@500']  # mid-trop variables

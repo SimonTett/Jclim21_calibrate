@@ -50,7 +50,7 @@ if not args.skipread:
 orderNames = ['CT', 'ENTCOEF', 'RHCRIT', 'EACF', 'VF1', 'ALPHAM', 'CW_LAND', 'KAY_GWAVE', 'CHARNOCK', 'ICE_SIZE',
               'ASYM_LAMBDA', 'G0', 'DYNDIFF', 'Z0FSEA']
 # ordered in ECS
-fig = plt.figure("params", figsize=[8.2, 8], clear=True)
+fig = plt.figure("params", figsize=[8, 6], clear=True)
 
 gs = gridspec.GridSpec(nStudies, 6)  # 1 extra for standard config
 

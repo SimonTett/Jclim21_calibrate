@@ -114,7 +114,7 @@ def plotValues(df, index, col, ax, normalise=None):
     return None
 
 
-def scatter_values(df, xvar, yvar, ax):
+def scatter_values(df, xvar, yvar, ax,size=12):
     """
     Plot boxes and text
     :return: nada
@@ -124,7 +124,7 @@ def scatter_values(df, xvar, yvar, ax):
     text = df.loc[:, 'shortText']
     optimised = df.loc[:, 'Optimised']
     translate = {'Y': 'lightblue'}
-    fontDir = dict(size=12, weight='bold')
+    fontDir = dict(size=size, weight='bold')
     bboxDir = dict(linewidth=0, alpha=0.5, pad=0)
     for colour, (name, row) in zip(colours.values,
                                    df.iterrows()):  # x,y,name,tt,o in zip(df.loc[:,xvar],df.loc[:,yvar],df.index,text,optimised): # iterate over rows.
@@ -384,7 +384,7 @@ ens_text_colours = {'CMIP5': 'black', 'CMIP6':'darkblue','CE7': 'black', 'DF14':
 ## plot distributions for main paper.
 labelV = PaperLib.plotLabel()
 ensembles = ['SS', 'DF14', 'CE7', 'CMIP6', 'CMIP5']  # ensembles to plot.
-fig, axis = plt.subplots(2, 2, sharey=True, num="distributions", figsize=[8.2,7], clear=True)
+fig, axis = plt.subplots(2, 2, sharey=True, num="distributions", figsize=[8,6], clear=True)
 for var, title, xtitle, ax in zip(['COST', 'CTL_ts_t15', 'T140', 'ECS_4xCO2', ],
                                   ['2001 - 2005 Cost', 'Control GMSAT', 'T140', 'ECS4'],
                                   ['Cost', 'GMSAT (K)', 'Warming (K)', 'Warming (K)'],
@@ -478,7 +478,7 @@ labelV = PaperLib.plotLabel()
 ensembles = ['SS', 'DF14', 'CE7']  # ensembles to plot.
 Standard = allData.loc['Standard']
 names = ['CE7', 'DF14', 'SS', 'ICE']
-fig, axis = plt.subplots(3, 1, num="PP_ECS", figsize=[8.6,8], clear=True)
+fig, axis = plt.subplots(3, 1, num="PP_ECS", figsize=[3,5], clear=True)
 
 linestyle = dict(color='black', linewidth=2, linestyle='dashed')  # linestyle ctls
 fill = dict(color='grey', alpha=0.3)  # fill styles
@@ -501,14 +501,14 @@ for (varx, vary), title, (xtitle, ytitle), ax in zip(
 
     for ensemble in names:  # loop over ensembles
         # color = ens_colours[ensemble]
-        size = 11
+        size = 10
         marker = 'd'
         data = allData.query(f'Ensemble == "{ensemble}"')
         L = ~data.loc[:, varx].isnull()
         d = data[L]  # removed all missing data
         colors = PaperLib.sym_colors(d)
         if ensemble == 'SS':
-            scatter_values(d, varx, vary, ax)
+            scatter_values(d, varx, vary, ax,size=10)
         elif ensemble != 'ICE':
             d.plot.scatter(varx, vary, color=colors.values.tolist(), marker=marker, s=(size ** 2), ax=ax)
 
@@ -518,7 +518,7 @@ for (varx, vary), title, (xtitle, ytitle), ax in zip(
             varx_half = half_var(data, varx)[0:1]
             vary_half = half_var(data, vary)[0:1]  # hack to only show the 4xCO2 result
             for vx, vy, marker_mn in zip(varx_half, vary_half, ['*', 'h']):
-                ax.plot(vx, vy, color=colors[0], marker=marker_mn, ms=20, linestyle='None', markeredgewidth=2,
+                ax.plot(vx, vy, color=colors[0], marker=marker_mn, ms=15, linestyle='None', markeredgewidth=2,
                         mec='black', alpha=0.7)
         else:  # ICE data.
             cov = np.cov(d.loc[:, varx], d.loc[:, vary])
@@ -566,8 +566,8 @@ for (varx, vary), title, (xtitle, ytitle), ax in zip(
 
     ax.fill_between(x, y_lower, y_upper, **fill2)
     ax.plot(x, y, **linestyle)
-    ax.text(pos[0], pos[1], 'H', fontsize='xx-large', transform=ax.transAxes,va='center')
-    ax.text(neg[0], neg[1], 'L', fontsize='xx-large', transform=ax.transAxes,va='center')
+    ax.text(pos[0], pos[1], 'H', fontsize='large', transform=ax.transAxes,va='center')
+    ax.text(neg[0], neg[1], 'L', fontsize='large', transform=ax.transAxes,va='center')
 plt.tight_layout()
 fig.show()
 PaperLib.saveFig(fig, "PP_ECS4")
@@ -608,7 +608,7 @@ for ensemble in ['CMIP5', 'CMIP6', 'CE7', 'DF14']:
     delta.append(d)
 
 ## plot the normalised differences
-f, ax = plt.subplots(1, 1, num='AMIP_NORM', clear=True, figsize=[8.2,6])
+f, ax = plt.subplots(1, 1, num='AMIP_NORM', clear=True, figsize=[8,4])
 obsNames = config.obsNames()
 plotSimDelta2(delta, ax, ['darkBlue', 'cornflowerblue', 'grey', 'orange'], obsNames)
 # add plus or minus 2 lines

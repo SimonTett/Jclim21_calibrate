@@ -206,7 +206,7 @@ def compPredictionVar(jacobian, paramNorm, stdParam, stdValues):
     cov = (jacobian.values.T @ paramNorm.cov) @ jacobian.values
     return scipy.stats.multivariate_normal(mean=mn, cov=(cov+cov.T)/2., allow_singular=True)
 
-def limitParamCov(paramDist, stdParam, stdValues, jacobian, minSamp=1000, paramLimit=[0,1], verbose=False):
+def limitParamCov(paramDist, stdParam, stdValues, jacobian, minSamp=1000, paramLimit=None, verbose=False):
     """
     Compute the covariance of the coupled model when parameters are limited to (by default) (0,1)
     :param paramDist: scipy.stats.multivariate_normal object -- multi-variate normal dist of parameter values.
@@ -214,12 +214,17 @@ def limitParamCov(paramDist, stdParam, stdValues, jacobian, minSamp=1000, paramL
     :param stdValues: standard model values
     :param jacobian: Jacobian of d model values/ d param
     :param minSamp: Minimum number of samples to generate.
-    :param paramLimit: Limits on params -- default is 0,1.
+    :param paramLimit: Limits on params (pass in a 2 x nParam numpy array) --
+        default is None which sets limits to 0,1 for each param
     :param verbose: Optional -- default False. If True be a bit verbose.
     :return: a multivariate normal dist.
     """
 
     np.random.seed(123456)  # always make sure have the same RNG seed
+    if paramLimit is None:
+        paramLimit = np.zeros([2,len(stdParam)])
+        paramLimit[1,:] = 1
+
 
     sampCount = 0  # no of samples
     nSamp = int(minSamp) # initial estimate of how many samples to generate
@@ -231,7 +236,7 @@ def limitParamCov(paramDist, stdParam, stdValues, jacobian, minSamp=1000, paramL
     while sampCount < minSamp:
         lsamp = paramDist.rvs(nSamp)
         nGen += nSamp  # running count of how many samples have been generated.
-        L = ((lsamp >= paramLimit[0]) & (lsamp <= paramLimit[1]))  # where all generated values are OK
+        L = ((lsamp >= paramLimit[0,:]) & (lsamp <= paramLimit[1,:]))  # where all generated values are OK
         cnt += L.sum(0)  # increment count of OK for individual parameters
         OK = L.all(axis=1)  # good cases
         sampCount += OK.sum()  # total no of samples we've generated.

@@ -41,13 +41,13 @@ Standard_taylor.loc[:, 'Ensemble'] = 'ICE'
 Standard_taylor.loc[:, 'zorder'] = 20
 df_all = pd.concat([DFOLS_taylor, CE7_taylor,CMIP5_taylor, CMIP6_taylor, Standard_taylor])
 # plot
-fig = plt.figure('taylor_diag', figsize=[8, 5], clear=True)
+fig = plt.figure('taylor_diag', figsize=[8, 4], clear=True)
 taylor_diags = []
 
 pinfo = ( # info for plotting -- variables, symbols, title for plot and subplot arg.
     (dict(air_pressure_at_mean_sea_level='^'), 'Surface', 221),
     (dict(air_temperature_tas='*', precipitation_flux='D'), 'Land Surface', 222),
-    (dict(relative_humidity='s', air_temperature_500='*'), 'Mid Troposphere', 223),
+    (dict(relative_humidity='s', air_temperature_500='*'), 'Troposphere', 223),
     (dict(toa_outgoing_longwave_flux='D', toa_outgoing_shortwave_flux='v'), 'TOA Radiation', 224)
 )
 
@@ -55,7 +55,7 @@ for info in pinfo:
     dia = PaperLib.TaylorDiagram(rect=info[-1], sdConts=[0.75, 1.0, 1.25],
                                  theta_range=[0, np.arccos(0.7)], sd_range=[0.0, 1.25])
     taylor_diags.append(dia)
-    dia._ax.set_title(info[-2], size=14, position=(0.3, 0.0))
+    dia._ax.set_title(info[-2], size=12, position=(0.3, 0.0))
 
 sym_col = PaperLib.sym_colors(df_all).rename('sym_colour')
 sym_col.loc['Standard']='grey'
@@ -95,10 +95,10 @@ for dia, info in zip(taylor_diags, pinfo):
         dia.ax.annotate(Shortnames[var], c, c + [0.05, -0.2], color='black', alpha=1, fontsize=11,
                         weight='bold', ha='right', bbox=bbox, arrowprops=arrowprops, zorder=100)
 
-lab = PaperLib.plotLabel(fontdict=dict(size=12, weight='12'))
+lab = PaperLib.plotLabel()
 for dia in taylor_diags:
     contours = dia.add_contours(5, colors='gray', linestyles=':')
-    plt.clabel(contours, inline=1, fontsize=12, fmt='%2.2f')
+    plt.clabel(contours, inline=1, fontsize=10, fmt='%2.2f')
     lab.plot(dia.ax)
 fig.tight_layout()
 fig.show()
